@@ -1,0 +1,7 @@
+{
+  "name": "AI Storyboard Master",
+  "description": "A professional tool for generating consistent 3x3 storyboard prompts from reference images using Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
