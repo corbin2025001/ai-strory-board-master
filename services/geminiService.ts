@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { StoryboardResult, ShotSize } from "../types";
+import { StoryboardResult, ShotSize, GridLayout, AspectRatio } from "../types";
 
 export class GeminiService {
   private ai: GoogleGenAI;
@@ -10,7 +10,12 @@ export class GeminiService {
     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
-  async analyzeAndGenerate(imagesBase64: string[], selectedShots: ShotSize[]): Promise<StoryboardResult> {
+  async analyzeAndGenerate(
+    imagesBase64: string[], 
+    selectedShots: ShotSize[],
+    layout: GridLayout,
+    aspectRatio: AspectRatio
+  ): Promise<StoryboardResult> {
     // Using gemini-3-pro-preview for complex reasoning and high-quality creative analysis
     const model = 'gemini-3-pro-preview';
     
@@ -26,35 +31,53 @@ export class GeminiService {
     });
 
     const shotSizesEn = selectedShots.join(', ');
+    const numShots = layout === '3x3' ? 9 : 4;
+    const numTransitions = numShots - 1;
 
     const prompt = `
       Analyze the provided reference images to extract key visual elements (Subject, Clothing, Environment, Lighting, Mood).
-      Then, generate a professional storyboard prompt with 9 shots.
+      
+      Task 1: Generate a professional storyboard prompt with ${numShots} shots.
       The requested camera shot sizes are: ${shotSizesEn}.
+      The target aspect ratio for the final image is ${aspectRatio}.
+
+      Task 2: Generate ${numTransitions} specific "Video Transition Prompts" to bridge the gap between consecutive shots (Shot 1->2, 2->3, etc.).
+      These prompts will be used in AI video generators (like Luma or Runway) using Shot N as the Start Frame and Shot N+1 as the End Frame.
+      The transition prompts must:
+      - Be highly detailed and cinematic.
+      - Describe the specific camera movement (e.g., "Slow zoom in," "Pan right," "Rack focus") needed to get from visual A to visual B.
+      - Describe the subject's action or subtle movements during the transition.
+      - Ensure physics and lighting continuity.
+      - Aim for a smooth, natural flow.
 
       Return the result in JSON format with both English (EN) and Chinese (CN) translations.
       The structure must be:
       {
         "scenePrompt": {
-          "en": "Detailed base description of the scene/subject in English",
-          "cn": "场景和主体的详细描述（中文）"
+          "en": "Detailed base description of the scene/subject",
+          "cn": "..."
         },
         "shots": [
+          { "id": 1, "description": { "en": "...", "cn": "..." } },
+          ... (total ${numShots} shots)
+        ],
+        "transitions": [
           {
-            "id": 1,
-            "description": {
-              "en": "Shot 1 detailed visual description in English",
-              "cn": "镜头1的详细视觉描述（中文）"
+            "fromShot": 1,
+            "toShot": 2,
+            "prompt": {
+              "en": "Detailed video generation prompt describing the motion from shot 1 to 2...",
+              "cn": "描述从镜头1过渡到镜头2的详细视频生成提示词..."
             }
           },
-          ... (total 9 shots)
+          ... (total ${numTransitions} transitions)
         ]
       }
 
       Important rules:
-      1. Ensure strict visual consistency across all 9 shots (same character features, clothes, lighting).
+      1. Ensure strict visual consistency across all shots.
       2. Follow the requested shot sizes.
-      3. Descriptions should be cinematic and detailed.
+      3. Transition prompts must be actionable instructions for a video model.
     `;
 
     try {
@@ -92,9 +115,28 @@ export class GeminiService {
                   },
                   required: ["id", "description"]
                 }
+              },
+              transitions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    fromShot: { type: Type.NUMBER },
+                    toShot: { type: Type.NUMBER },
+                    prompt: {
+                      type: Type.OBJECT,
+                      properties: {
+                        en: { type: Type.STRING },
+                        cn: { type: Type.STRING }
+                      },
+                      required: ["en", "cn"]
+                    }
+                  },
+                  required: ["fromShot", "toShot", "prompt"]
+                }
               }
             },
-            required: ["scenePrompt", "shots"]
+            required: ["scenePrompt", "shots", "transitions"]
           }
         }
       });

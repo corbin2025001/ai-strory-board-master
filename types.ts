@@ -27,6 +27,18 @@ export const ShotSizeLabels: Record<ShotSize, { en: string; cn: string }> = {
   [ShotSize.BirdEye]: { en: "Bird's Eye View", cn: "鸟瞰图" }
 };
 
+export type GridLayout = '3x3' | '2x2';
+export type AspectRatio = '16:9' | '9:16' | '4:3' | '3:4' | '1:1';
+
+export interface TransitionResult {
+  fromShot: number;
+  toShot: number;
+  prompt: {
+    en: string;
+    cn: string;
+  };
+}
+
 export interface StoryboardResult {
   scenePrompt: {
     en: string;
@@ -39,6 +51,7 @@ export interface StoryboardResult {
       cn: string;
     };
   }[];
+  transitions: TransitionResult[];
 }
 
 export interface AnalysisStatus {
