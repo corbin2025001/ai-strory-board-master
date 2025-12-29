@@ -107,6 +107,54 @@ export class GeminiService {
       throw error;
     }
   }
+
+  async regenerateShot(
+    scenePrompt: { en: string; cn: string },
+    shotId: number,
+    shotSize: ShotSize
+  ): Promise<{ en: string; cn: string }> {
+    const model = 'gemini-3-flash-preview'; // Flash is fast and sufficient for text rewriting
+
+    const prompt = `
+      Context: A storyboard scene description:
+      "${scenePrompt.en}"
+
+      Task: Rewrite the detailed visual description for Shot ${shotId} ONLY.
+      The new Camera Shot Size is: ${shotSize}.
+
+      Requirements:
+      1. Keep it consistent with the provided scene context.
+      2. Focus on the composition dictated by the '${shotSize}'.
+      3. Return ONLY a JSON object with this structure:
+      {
+        "en": "New English description...",
+        "cn": "New Chinese description..."
+      }
+    `;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model,
+        contents: { parts: [{ text: prompt }] },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              en: { type: Type.STRING },
+              cn: { type: Type.STRING }
+            },
+            required: ["en", "cn"]
+          }
+        }
+      });
+
+      return JSON.parse(response.text || '{}');
+    } catch (error) {
+      console.error("Gemini API Error (Regenerate Shot):", error);
+      throw error;
+    }
+  }
 }
 
 export const geminiService = new GeminiService();

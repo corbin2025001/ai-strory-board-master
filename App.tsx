@@ -2,7 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import { ShotSize, ShotSizeLabels, StoryboardResult, AnalysisStatus } from './types';
 import { geminiService } from './services/geminiService';
-import { Camera, Image as ImageIcon, Sparkles, Copy, Check, Globe, RefreshCcw, Trash2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, Sparkles, Copy, Check, Globe, RefreshCcw, Trash2, Settings2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
@@ -11,6 +11,9 @@ const App: React.FC = () => {
   const [result, setResult] = useState<StoryboardResult | null>(null);
   const [language, setLanguage] = useState<'en' | 'cn'>('cn');
   const [copied, setCopied] = useState(false);
+  
+  // Track which specific shot is currently regenerating
+  const [regeneratingShotId, setRegeneratingShotId] = useState<number | null>(null);
 
   // Fix: Added explicit type cast for files to ensure reader.readAsDataURL receives a Blob
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,6 +51,44 @@ const App: React.FC = () => {
       setStatus({ step: 'completed', message: 'Generation successful!' });
     } catch (error) {
       setStatus({ step: 'error', message: 'Failed to generate storyboard. Please check your API key or try again.' });
+    }
+  };
+
+  const handleSingleShotRegenerate = async (index: number) => {
+    if (!result) return;
+    
+    setRegeneratingShotId(index);
+    try {
+      // Use the currently selected size for this shot
+      const currentSize = selectedShots[index];
+      const newDescription = await geminiService.regenerateShot(
+        result.scenePrompt,
+        index + 1, // Shot IDs are usually 1-based in our logic
+        currentSize
+      );
+
+      // Update the specific shot in the result state
+      setResult(prev => {
+        if (!prev) return null;
+        const newShots = [...prev.shots];
+        // Ensure we are updating the correct index. 
+        // Assuming result.shots matches index order 0-8.
+        if (newShots[index]) {
+            newShots[index] = {
+                ...newShots[index],
+                description: newDescription
+            };
+        }
+        return {
+            ...prev,
+            shots: newShots
+        };
+      });
+    } catch (error) {
+      console.error("Failed to regenerate shot", error);
+      alert("Failed to regenerate specific shot. Please try again.");
+    } finally {
+      setRegeneratingShotId(null);
     }
   };
 
@@ -203,12 +244,39 @@ const App: React.FC = () => {
                 </pre>
                 
                 <div className="mt-8 space-y-6">
-                  <h3 className="text-lg font-medium text-slate-100 border-l-4 border-blue-500 pl-3">Visual Breakdown</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-slate-100 border-l-4 border-blue-500 pl-3">Visual Breakdown & Tuning</h3>
+                    <p className="text-xs text-slate-500">Change shot size and click refresh to update description</p>
+                  </div>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {result.shots.map((shot, i) => (
-                      <div key={i} className="p-4 bg-slate-950/40 rounded-lg border border-slate-800/50">
-                        <span className="text-xs font-bold text-blue-400 uppercase">Shot {i+1}</span>
-                        <p className="text-sm mt-1 text-slate-400">
+                      <div key={i} className="p-4 bg-slate-950/40 rounded-lg border border-slate-800/50 flex flex-col gap-3 group hover:border-blue-500/30 transition-all">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-blue-400 uppercase">Shot {i+1}</span>
+                          <div className="flex items-center gap-2">
+                             <select 
+                               value={selectedShots[i]}
+                               onChange={(e) => handleShotChange(i, e.target.value as ShotSize)}
+                               className="bg-slate-900 text-[10px] p-1.5 rounded border border-slate-700 focus:border-blue-500 text-slate-300 max-w-[120px]"
+                             >
+                               {Object.values(ShotSize).map(size => (
+                                 <option key={size} value={size}>
+                                   {language === 'cn' ? ShotSizeLabels[size].cn : ShotSizeLabels[size].en}
+                                 </option>
+                               ))}
+                             </select>
+                             <button 
+                               onClick={() => handleSingleShotRegenerate(i)}
+                               disabled={regeneratingShotId === i}
+                               title="Regenerate this shot description"
+                               className="p-1.5 bg-slate-800 hover:bg-blue-600 rounded text-slate-300 hover:text-white transition-colors border border-slate-700"
+                             >
+                               <RefreshCcw className={`w-3.5 h-3.5 ${regeneratingShotId === i ? 'animate-spin' : ''}`} />
+                             </button>
+                          </div>
+                        </div>
+                        <p className={`text-sm text-slate-300 transition-opacity ${regeneratingShotId === i ? 'opacity-50' : 'opacity-100'}`}>
                           {language === 'cn' ? shot.description.cn : shot.description.en}
                         </p>
                       </div>
